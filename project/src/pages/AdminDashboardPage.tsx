@@ -30,12 +30,13 @@ interface ExamResult {
 
 const AdminDashboardPage: React.FC = () => {
   const adminName = "admin"; // Set the username as "admin"
+  const [activeSection, setActiveSection] = useState<string | null>(null);
   const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
   const [showResultForm, setShowResultForm] = useState(false);
   const [showModifyDetailsForm, setShowModifyDetailsForm] = useState(false);
+  const [showRevaluationForm, setShowRevaluationForm] = useState(false);
   const [editStudent, setEditStudent] = useState<any>(null);
   const [deleteStudent, setDeleteStudent] = useState<any>(null);
-  const [showRevaluationForm, setShowRevaluationForm] = useState(false);
   const [revaluationData, setRevaluationData] = useState([
     { usn: '1', name: 'John Doe', subCode: 'CS101', subName: 'Computer Science', semester: '5', marks: 40, credits: 4, fees: 500, paymentStatus: 'Paid' },
     { usn: '2', name: 'Jane Smith', subCode: 'CS102', subName: 'Data Structures', semester: '5', marks: 35, credits: 4, fees: 500, paymentStatus: 'Pending' },
@@ -195,39 +196,31 @@ const AdminDashboardPage: React.FC = () => {
   };
 
   const handleAddAnnouncementClick = () => {
-    setShowAnnouncementForm((prev) => !prev);
-    if (!showAnnouncementForm) {
-      setShowResultForm(false);
-      setShowModifyDetailsForm(false);
-      setShowRevaluationForm(false);
-    }
+    setActiveSection(activeSection === 'announcement' ? null : 'announcement');
+    setAnnouncement({
+      title: '',
+      date: new Date().toISOString().split('T')[0],
+      type: 'Announcement',
+      link: ''
+    });
   };
 
-  const handleAddResultClick = () => {
-    setShowResultForm((prev) => !prev);
-    if (!showResultForm) {
-      setShowAnnouncementForm(false);
-      setShowModifyDetailsForm(false);
-      setShowRevaluationForm(false);
-    }
+  const handleResultClick = () => {
+    setActiveSection(activeSection === 'result' ? null : 'result');
+    setExamResult({
+      semester: '',
+      examDate: new Date().toISOString().split('T')[0],
+      examType: 'Regular',
+      csvFile: null
+    });
   };
 
   const handleModifyDetailsClick = () => {
-    setShowModifyDetailsForm((prev) => !prev);
-    if (!showModifyDetailsForm) {
-      setShowAnnouncementForm(false);
-      setShowResultForm(false);
-      setShowRevaluationForm(false);
-    }
+    setActiveSection(activeSection === 'modifyDetails' ? null : 'modifyDetails');
   };
 
   const handleRevaluationClick = () => {
-    setShowRevaluationForm((prev) => !prev);
-    if (!showRevaluationForm) {
-      setShowAnnouncementForm(false);
-      setShowResultForm(false);
-      setShowModifyDetailsForm(false);
-    }
+    setActiveSection(activeSection === 'revaluation' ? null : 'revaluation');
   };
 
   const handleLogout = () => {
@@ -355,199 +348,173 @@ const AdminDashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <div className={`flex-1 ${showAnnouncementForm || showResultForm || showModifyDetailsForm || editStudent || deleteStudent || showRevaluationForm ? 'blur-sm' : ''}`}>
-        <main className="p-6 space-y-6">
-          <div className="flex justify-between items-center bg-white p-6 rounded-lg shadow-md">
-            <div className="flex items-center">
-              
-              <div>
-                <h1 className="text-4xl font-bold mb-2">Welcome, {adminName}</h1>
-                <p className="text-gray-600">Manage your dashboard and perform administrative tasks.</p>
-              </div>
-            </div>
-            <button 
-              className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition duration-300"
-              onClick={handleLogout}
-            >
-              Logout
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <h2 className="text-2xl font-semibold mb-4">Make Announcement </h2>
-              <button 
-                className="mt-4 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition duration-300"
-                onClick={handleAddAnnouncementClick}
-              >
-                {showAnnouncementForm ? "Close Form" : "Add Announcement"}
-              </button>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <h2 className="text-2xl font-semibold mb-4">Add Results</h2>
-              <button 
-                className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
-                onClick={handleAddResultClick}
-              >
-                {showResultForm ? "Close Form" : "Add Result"}
-              </button>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <h2 className="text-2xl font-semibold mb-4">Modify Student Details</h2>
-              <button 
-                className="mt-4 bg-yellow-600 text-white py-3 px-6 rounded-lg hover:bg-yellow-700 transition duration-300"
-                onClick={handleModifyDetailsClick}
-              >
-                {showModifyDetailsForm ? "Close Form" : "Modify Details"}
-              </button>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <h2 className="text-2xl font-semibold mb-4">Revaluation Process</h2>
-              <button 
-                className="mt-4 bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition duration-300"
-                onClick={handleRevaluationClick}
-              >
-                {showRevaluationForm ? "Close Form" : "Revaluation Process"}
-              </button>
-            </div>
-          </div>
-        </main>
+    <div className="container mx-auto p-4">
+      {/* Welcome Header */}
+      <div className="bg-white p-6 rounded-lg shadow-lg mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Welcome, Admin</h1>
+          <p className="text-gray-600 mt-1">Manage your dashboard and perform administrative tasks</p>
+        </div>
+        <button
+          onClick={handleLogout}
+          className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg transition duration-300 flex items-center gap-2"
+        >
+          <span>Logout</span>
+        </button>
       </div>
 
-      {showAnnouncementForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
-            <button 
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              onClick={() => setShowAnnouncementForm(false)}
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <h2 className="text-2xl font-semibold mb-4">New Announcement</h2>
-            <div className="bg-white p-6 rounded-lg shadow-lg mb-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-semibold">Create Announcement</h2>
-                <button
-                  onClick={() => setShowPreview(!showPreview)}
-                  className="px-4 py-2 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
-                >
-                  {showPreview ? 'Edit Announcement' : 'Preview'}
-                </button>
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Dashboard Cards */}
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <h3 className="text-xl font-semibold mb-2">Add Announcement</h3>
+          <p className="text-gray-600 mb-4">Create new announcements</p>
+          <button
+            onClick={handleAddAnnouncementClick}
+            className={`w-full py-2 px-4 rounded-lg transition duration-300 ${
+              activeSection === 'announcement'
+                ? 'bg-blue-800 text-white hover:bg-blue-900'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            {activeSection === 'announcement' ? 'Close Form' : 'Add Announcement'}
+          </button>
+        </div>
 
-              {showPreview ? (
-                <div className="border p-4 rounded-lg">
-                  <h3 className="font-bold text-lg">{announcement.title}</h3>
-                  <p className="text-gray-600">Date: {new Date(announcement.date).toLocaleDateString()}</p>
-                  <p className="text-gray-600">Type: {announcement.type}</p>
-                  <a href={announcement.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                    View Link
-                  </a>
-                  <div className="mt-4">
-                    <button
-                      onClick={handleAnnouncementSubmit}
-                      disabled={isSubmitting}
-                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 mr-2"
-                    >
-                      {isSubmitting ? 'Creating...' : 'Confirm & Create'}
-                    </button>
-                    <button
-                      onClick={() => setShowPreview(false)}
-                      className="bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
-                    >
-                      Edit
-                    </button>
-                  </div>
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <h3 className="text-xl font-semibold mb-2">Upload Result</h3>
+          <p className="text-gray-600 mb-4">Upload and manage exam results</p>
+          <button
+            onClick={handleResultClick}
+            className={`w-full py-2 px-4 rounded-lg transition duration-300 ${
+              activeSection === 'result'
+                ? 'bg-green-800 text-white hover:bg-green-900'
+                : 'bg-green-600 text-white hover:bg-green-700'
+            }`}
+          >
+            {activeSection === 'result' ? 'Close Form' : 'Upload Result'}
+          </button>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <h3 className="text-xl font-semibold mb-2">Modify Details</h3>
+          <p className="text-gray-600 mb-4">Update student information</p>
+          <button
+            onClick={handleModifyDetailsClick}
+            className={`w-full py-2 px-4 rounded-lg transition duration-300 ${
+              activeSection === 'modifyDetails'
+                ? 'bg-yellow-800 text-white hover:bg-yellow-900'
+                : 'bg-yellow-600 text-white hover:bg-yellow-700'
+            }`}
+          >
+            {activeSection === 'modifyDetails' ? 'Close Form' : 'Modify Details'}
+          </button>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow-lg">
+          <h3 className="text-xl font-semibold mb-2">Revaluation</h3>
+          <p className="text-gray-600 mb-4">Manage revaluation requests</p>
+          <button
+            onClick={handleRevaluationClick}
+            className={`w-full py-2 px-4 rounded-lg transition duration-300 ${
+              activeSection === 'revaluation'
+                ? 'bg-purple-800 text-white hover:bg-purple-900'
+                : 'bg-purple-600 text-white hover:bg-purple-700'
+            }`}
+          >
+            {activeSection === 'revaluation' ? 'Close Form' : 'View Requests'}
+          </button>
+        </div>
+      </div>
+
+      {/* Content Sections */}
+      <div className="mt-8">
+        {activeSection === 'announcement' && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+              <h2 className="text-2xl font-bold mb-4">Add Announcement</h2>
+              <form onSubmit={handleAnnouncementSubmit}>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Title</label>
+                  <input
+                    type="text"
+                    value={announcement.title}
+                    onChange={(e) => {
+                      setAnnouncement({ ...announcement, title: e.target.value });
+                      setFormErrors({ ...formErrors, title: undefined });
+                    }}
+                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
+                      formErrors.title ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {formErrors.title && <p className="text-red-500 text-sm mt-1">{formErrors.title}</p>}
                 </div>
-              ) : (
-                <form onSubmit={(e) => { e.preventDefault(); setShowPreview(true); }} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Title</label>
-                    <input
-                      type="text"
-                      value={announcement.title}
-                      onChange={(e) => {
-                        setAnnouncement({ ...announcement, title: e.target.value });
-                        setFormErrors({ ...formErrors, title: undefined });
-                      }}
-                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                        formErrors.title ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    />
-                    {formErrors.title && <p className="text-red-500 text-sm mt-1">{formErrors.title}</p>}
-                  </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Date</label>
-                    <input
-                      type="date"
-                      value={announcement.date}
-                      onChange={(e) => {
-                        setAnnouncement({ ...announcement, date: e.target.value });
-                        setFormErrors({ ...formErrors, date: undefined });
-                      }}
-                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                        formErrors.date ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    />
-                    {formErrors.date && <p className="text-red-500 text-sm mt-1">{formErrors.date}</p>}
-                  </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700">Date</label>
+                  <input
+                    type="date"
+                    value={announcement.date}
+                    onChange={(e) => {
+                      setAnnouncement({ ...announcement, date: e.target.value });
+                      setFormErrors({ ...formErrors, date: undefined });
+                    }}
+                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
+                      formErrors.date ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {formErrors.date && <p className="text-red-500 text-sm mt-1">{formErrors.date}</p>}
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Type</label>
-                    <select
-                      value={announcement.type}
-                      onChange={(e) => {
-                        setAnnouncement({ ...announcement, type: e.target.value as Announcement['type'] });
-                        setFormErrors({ ...formErrors, type: undefined });
-                      }}
-                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                        formErrors.type ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    >
-                      <option value="Announcement">Announcement</option>
-                      <option value="Result">Result</option>
-                      <option value="Revaluation">Revaluation</option>
-                      <option value="Notice">Notice</option>
-                    </select>
-                    {formErrors.type && <p className="text-red-500 text-sm mt-1">{formErrors.type}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Link</label>
-                    <input
-                      type="url"
-                      value={announcement.link}
-                      onChange={(e) => {
-                        setAnnouncement({ ...announcement, link: e.target.value });
-                        setFormErrors({ ...formErrors, link: undefined });
-                      }}
-                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                        formErrors.link ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="https://example.com"
-                    />
-                    {formErrors.link && <p className="text-red-500 text-sm mt-1">{formErrors.link}</p>}
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700">Type</label>
+                  <select
+                    value={announcement.type}
+                    onChange={(e) => {
+                      setAnnouncement({ ...announcement, type: e.target.value as Announcement['type'] });
+                      setFormErrors({ ...formErrors, type: undefined });
+                    }}
+                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
+                      formErrors.type ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   >
-                    Preview Announcement
-                  </button>
-                </form>
-              )}
+                    <option value="Announcement">Announcement</option>
+                    <option value="Result">Result</option>
+                    <option value="Revaluation">Revaluation</option>
+                    <option value="Notice">Notice</option>
+                  </select>
+                  {formErrors.type && <p className="text-red-500 text-sm mt-1">{formErrors.type}</p>}
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700">Link</label>
+                  <input
+                    type="url"
+                    value={announcement.link}
+                    onChange={(e) => {
+                      setAnnouncement({ ...announcement, link: e.target.value });
+                      setFormErrors({ ...formErrors, link: undefined });
+                    }}
+                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
+                      formErrors.link ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="https://example.com"
+                  />
+                  {formErrors.link && <p className="text-red-500 text-sm mt-1">{formErrors.link}</p>}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="mt-6 w-full bg-blue-800 text-white py-2 px-4 rounded-md hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Announcement'}
+                </button>
+              </form>
             </div>
 
-            {/* Recent Announcements List */}
+            {/* Recent Announcements Section */}
             <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-2xl font-semibold mb-4">Recent Announcements</h2>
+              <h2 className="text-2xl font-bold mb-4">Recent Announcements</h2>
               <div className="space-y-4">
                 {recentAnnouncements.map((item) => (
                   <div key={item._id} className="border p-4 rounded-lg hover:bg-gray-50">
@@ -575,72 +542,12 @@ const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {showResultForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
-            <button 
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              onClick={() => setShowResultForm(false)}
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <h2 className="text-2xl font-semibold mb-4">New Exam Details</h2>
-            <form className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Semester</label>
-                <input 
-                  type="text" 
-                  name="semester"
-                  value={examDetails.semester}
-                  onChange={handleExamDetailsChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Exam Date</label>
-                <input 
-                  type="date" 
-                  name="examDate"
-                  value={examDetails.examDate}
-                  onChange={handleExamDetailsChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Upload CSV</label>
-                <input 
-                  type="file" 
-                  accept=".csv"
-                  onChange={handleCSVUpload}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-                <p className="mt-2 text-sm text-gray-500">Please upload a CSV file containing the name of the student, subject code, and marks of each student.</p>
-              </div>
-              <button 
-                type="submit" 
-                className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
-              >
-                Submit
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showResultForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
-            <button 
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              onClick={() => setShowResultForm(false)}
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <h2 className="text-2xl font-semibold mb-4">Upload Exam Results</h2>
-            <form onSubmit={handleResultSubmit} className="space-y-4">
+        {activeSection === 'result' && (
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <h2 className="text-2xl font-bold mb-4">Upload Result</h2>
+            <form onSubmit={handleResultSubmit}>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Semester</label>
                 <input
@@ -698,7 +605,7 @@ const AdminDashboardPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isUploadingResult}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
                   isUploadingResult ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
@@ -715,215 +622,71 @@ const AdminDashboardPage: React.FC = () => {
                 )}
               </button>
             </form>
-
-            {/* CSV Format Guide */}
-            <div className="mt-6 p-4 bg-gray-50 rounded-md">
-              <h3 className="text-sm font-medium text-gray-900">CSV File Format Guide</h3>
-              <div className="mt-2 text-sm text-gray-500">
-                <p>Your CSV file should have the following columns:</p>
-                <ul className="list-disc pl-5 mt-2">
-                  <li>studentName (e.g., "John Doe")</li>
-                  <li>subjectCode (e.g., "CS101")</li>
-                  <li>marks (e.g., 85)</li>
-                </ul>
-                <p className="mt-2">Example:</p>
-                <pre className="mt-1 bg-gray-100 p-2 rounded text-xs">
-                  studentName,subjectCode,marks{'\n'}
-                  John Doe,CS101,85{'\n'}
-                  Jane Smith,CS101,92
-                </pre>
-              </div>
-            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {showModifyDetailsForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-4xl relative">
-            <button 
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              onClick={() => setShowModifyDetailsForm(false)}
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <h2 className="text-2xl font-semibold mb-4">Modify Student Details</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Filter by USN</label>
-                <input 
-                  type="text" 
-                  value={filterUSN}
-                  onChange={handleFilterChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                  placeholder="Enter USN to filter"
-                />
-              </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exam Date</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+        {activeSection === 'modifyDetails' && (
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <h2 className="text-2xl font-bold mb-4">Modify Student Details</h2>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Filter by USN</label>
+              <input
+                type="text"
+                value={filterUSN}
+                onChange={handleFilterChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                placeholder="Enter USN to filter"
+              />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exam Date</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredData.map((student, index) => (
+                    <tr key={index}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.usn}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.subjectCode}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.subjectName}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.marks}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.status}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.examDate}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex space-x-2">
+                        <button
+                          className={`text-blue-600 hover:text-blue-900 flex items-center ${editStudent ? 'blur-sm' : ''}`}
+                          onClick={() => handleEditClick(student)}
+                        >
+                          <Edit className="h-5 w-5 mr-1" />
+                          Edit
+                        </button>
+                        <button
+                          className="text-red-600 hover:text-red-900 flex items-center"
+                          onClick={() => handleDeleteClick(student)}
+                        >
+                          <Trash className="h-5 w-5 mr-1" />
+                          Delete
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredData.map((student, index) => (
-                      <tr key={index}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.usn}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.subjectCode}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.subjectName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.marks}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.status}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.examDate}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex space-x-2">
-                          <button 
-                            className={`text-blue-600 hover:text-blue-900 flex items-center ${editStudent ? 'blur-sm' : ''}`}
-                            onClick={() => handleEditClick(student)}
-                          >
-                            <Edit className="h-5 w-5 mr-1" />
-                            Edit
-                          </button>
-                          <button 
-                            className="text-red-600 hover:text-red-900 flex items-center"
-                            onClick={() => handleDeleteClick(student)}
-                          >
-                            <Trash className="h-5 w-5 mr-1" />
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {editStudent && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
-            <button 
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              onClick={() => setEditStudent(null)}
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <h2 className="text-2xl font-semibold mb-4">Edit Student Details</h2>
-            <form className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">USN</label>
-                <input 
-                  type="text" 
-                  name="usn"
-                  value={editStudent.usn}
-                  onChange={handleEditChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                  disabled
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Subject Code</label>
-                <input 
-                  type="text" 
-                  name="subjectCode"
-                  value={editStudent.subjectCode}
-                  onChange={handleEditChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Subject Name</label>
-                <input 
-                  type="text" 
-                  name="subjectName"
-                  value={editStudent.subjectName}
-                  onChange={handleEditChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Marks</label>
-                <input 
-                  type="number" 
-                  name="marks"
-                  value={editStudent.marks}
-                  onChange={handleEditChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Status</label>
-                <input 
-                  type="text" 
-                  name="status"
-                  value={editStudent.status}
-                  onChange={handleEditChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Exam Date</label>
-                <input 
-                  type="date" 
-                  name="examDate"
-                  value={editStudent.examDate}
-                  onChange={handleEditChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <button 
-                type="button" 
-                className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
-                onClick={handleEditSave}
-              >
-                Save
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {deleteStudent && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
-            <h2 className="text-2xl font-semibold mb-4">Confirm Deletion</h2>
-            <p>Are you sure you want to delete the student with USN {deleteStudent.usn}?</p>
-            <div className="mt-4 flex space-x-4">
-              <button 
-                className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition duration-300"
-                onClick={confirmDelete}
-              >
-                Delete
-              </button>
-              <button 
-                className="bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition duration-300"
-                onClick={() => setDeleteStudent(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRevaluationForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-6xl relative">
-            <button 
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              onClick={() => setShowRevaluationForm(false)}
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <h2 className="text-2xl font-semibold mb-4">Revaluation Applications</h2>
+        {activeSection === 'revaluation' && (
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <h2 className="text-2xl font-bold mb-4">Revaluation Requests</h2>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -951,15 +714,15 @@ const AdminDashboardPage: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.fees}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          student.paymentStatus === 'Paid' 
-                            ? 'bg-green-100 text-green-800' 
+                          student.paymentStatus === 'Paid'
+                            ? 'bg-green-100 text-green-800'
                             : 'bg-yellow-100 text-yellow-800'
                         }`}>
                           {student.paymentStatus}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <button 
+                        <button
                           className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-300"
                           onClick={() => handleEvaluateClick(student)}
                         >
@@ -972,78 +735,179 @@ const AdminDashboardPage: React.FC = () => {
               </table>
             </div>
           </div>
+        )}
+      </div>
+
+      {editStudent && (
+        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
+          <button
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            onClick={() => setEditStudent(null)}
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <h2 className="text-2xl font-semibold mb-4">Edit Student Details</h2>
+          <form className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">USN</label>
+              <input
+                type="text"
+                name="usn"
+                value={editStudent.usn}
+                onChange={handleEditChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                disabled
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Subject Code</label>
+              <input
+                type="text"
+                name="subjectCode"
+                value={editStudent.subjectCode}
+                onChange={handleEditChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Subject Name</label>
+              <input
+                type="text"
+                name="subjectName"
+                value={editStudent.subjectName}
+                onChange={handleEditChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Marks</label>
+              <input
+                type="number"
+                name="marks"
+                value={editStudent.marks}
+                onChange={handleEditChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Status</label>
+              <input
+                type="text"
+                name="status"
+                value={editStudent.status}
+                onChange={handleEditChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Exam Date</label>
+              <input
+                type="date"
+                name="examDate"
+                value={editStudent.examDate}
+                onChange={handleEditChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
+              onClick={handleEditSave}
+            >
+              Save
+            </button>
+          </form>
+        </div>
+      )}
+
+      {deleteStudent && (
+        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+          <h2 className="text-2xl font-semibold mb-4">Confirm Deletion</h2>
+          <p>Are you sure you want to delete the student with USN {deleteStudent.usn}?</p>
+          <div className="mt-4 flex space-x-4">
+            <button
+              className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition duration-300"
+              onClick={confirmDelete}
+            >
+              Delete
+            </button>
+            <button
+              className="bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition duration-300"
+              onClick={() => setDeleteStudent(null)}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
       {showEvaluationDetailsForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
-            <button 
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-              onClick={() => setShowEvaluationDetailsForm(false)}
+        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
+          <button
+            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            onClick={() => setShowEvaluationDetailsForm(false)}
+          >
+            <X className="h-6 w-6" />
+          </button>
+          <h2 className="text-2xl font-semibold mb-4">Evaluate Student</h2>
+          <form className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">USN</label>
+              <input
+                type="text"
+                name="usn"
+                value={evaluatingStudent.usn}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                disabled
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Subject Code</label>
+              <input
+                type="text"
+                name="subjectCode"
+                value={evaluatingStudent.subCode}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                disabled
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Subject Name</label>
+              <input
+                type="text"
+                name="subjectName"
+                value={evaluatingStudent.subName}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                disabled
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Marks</label>
+              <input
+                type="number"
+                name="marks"
+                value={evaluatingStudent.marks}
+                onChange={handleMarksChange}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Upload PDF</label>
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={handlePDFUpload}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
+              onClick={handleSaveEvaluation}
             >
-              <X className="h-6 w-6" />
+              Save
             </button>
-            <h2 className="text-2xl font-semibold mb-4">Evaluate Student</h2>
-            <form className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">USN</label>
-                <input 
-                  type="text" 
-                  name="usn"
-                  value={evaluatingStudent.usn}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                  disabled
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Subject Code</label>
-                <input 
-                  type="text" 
-                  name="subjectCode"
-                  value={evaluatingStudent.subCode}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                  disabled
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Subject Name</label>
-                <input 
-                  type="text" 
-                  name="subjectName"
-                  value={evaluatingStudent.subName}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                  disabled
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Marks</label>
-                <input 
-                  type="number" 
-                  name="marks"
-                  value={evaluatingStudent.marks}
-                  onChange={handleMarksChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Upload PDF</label>
-                <input 
-                  type="file" 
-                  accept=".pdf"
-                  onChange={handlePDFUpload}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" 
-                />
-              </div>
-              <button 
-                type="button" 
-                className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
-                onClick={handleSaveEvaluation}
-              >
-                Save
-              </button>
-            </form>
-          </div>
+          </form>
         </div>
       )}
     </div>
