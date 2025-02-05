@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // Import useNavigate from react-router-dom v6
 import { useAuthStore } from '../store/useAuthStore'; // Import useAuthStore
-import { Edit, Trash, X } from 'lucide-react';
+import { Edit, Trash, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface Announcement {
@@ -28,43 +28,31 @@ interface ExamResult {
   csvFile: File | null;
 }
 
+interface RevaluationRequest {
+  usn: string;
+  subject: string;
+  currentMarks: string;
+  applicationDate: string;
+  status: string;
+}
+
 const AdminDashboardPage: React.FC = () => {
   const adminName = "admin"; // Set the username as "admin"
   const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
-  const [showResultForm, setShowResultForm] = useState(false);
-  const [showModifyDetailsForm, setShowModifyDetailsForm] = useState(false);
   const [showRevaluationForm, setShowRevaluationForm] = useState(false);
-  const [editStudent, setEditStudent] = useState<any>(null);
-  const [deleteStudent, setDeleteStudent] = useState<any>(null);
   const [revaluationData, setRevaluationData] = useState([
-    { usn: '1', name: 'John Doe', subCode: 'CS101', subName: 'Computer Science', semester: '5', marks: 40, credits: 4, fees: 500, paymentStatus: 'Paid' },
-    { usn: '2', name: 'Jane Smith', subCode: 'CS102', subName: 'Data Structures', semester: '5', marks: 35, credits: 4, fees: 500, paymentStatus: 'Pending' },
-    // Add more dummy data as needed
-  ]);
-  const navigate = useNavigate(); // Initialize useNavigate
-  const logout = useAuthStore((state) => state.logout); // Get logout function from auth store
-  const [examDetails, setExamDetails] = useState({
-    semester: '',
-    examDate: ''
-  });
-  const [filterUSN, setFilterUSN] = useState('');
-  const [studentData, setStudentData] = useState([
-    { usn: '1', subjectCode: 'CS101', subjectName: 'Computer Science', marks: 85, status: 'Pass', examDate: '2023-01-01' },
+    { usn: '1', subjectCode: 'CS101', subjectName: 'Programming', marks: 85, status: 'Pass', examDate: '2023-01-01' },
     { usn: '2', subjectCode: 'CS102', subjectName: 'Data Structures', marks: 78, status: 'Pass', examDate: '2023-01-01' },
-    // Add more dummy data as needed
   ]);
-  const [showEvaluationDetailsForm, setShowEvaluationDetailsForm] = useState(false);
   const [evaluatingStudent, setEvaluatingStudent] = useState<any>(null);
   const [announcement, setAnnouncement] = useState<Announcement>({
     title: '',
     date: new Date().toISOString().split('T')[0],
-    type: 'Announcement',
+    type: '',
     link: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
-  const [showPreview, setShowPreview] = useState(false);
   const [recentAnnouncements, setRecentAnnouncements] = useState<Announcement[]>([]);
   const [examResult, setExamResult] = useState<ExamResult>({
     semester: '',
@@ -73,14 +61,37 @@ const AdminDashboardPage: React.FC = () => {
     csvFile: null
   });
   const [isUploadingResult, setIsUploadingResult] = useState(false);
+  const [revalFilter, setRevalFilter] = useState({
+    usn: '',
+    subject: '',
+    status: ''
+  });
+  const [filteredRevalData, setFilteredRevalData] = useState<RevaluationRequest[]>([]);
+  const navigate = useNavigate(); // Initialize useNavigate
+  const logout = useAuthStore((state) => state.logout); // Get logout function from auth store
+  const [filterUSN, setFilterUSN] = useState('');
+  const [studentData, setStudentData] = useState([
+    { usn: '1', subjectCode: 'CS101', subjectName: 'Computer Science', marks: 85, status: 'Pass', examDate: '2023-01-01' },
+    { usn: '2', subjectCode: 'CS102', subjectName: 'Data Structures', marks: 78, status: 'Pass', examDate: '2023-01-01' },
+  ]);
+  const [editStudent, setEditStudent] = useState<any>(null);
+  const [deleteStudent, setDeleteStudent] = useState<any>(null);
 
   // Fetch recent announcements
   const fetchAnnouncements = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/announcements');
+      const response = await fetch('http://localhost:5000/api/announcements');
       if (response.ok) {
         const data = await response.json();
-        setRecentAnnouncements(data);
+        // Convert date strings to proper format
+        const formattedData = data.map((item: any) => ({
+          ...item,
+          date: new Date(item.date).toISOString().split('T')[0]
+        }));
+        setRecentAnnouncements(formattedData);
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Failed to fetch announcements');
       }
     } catch (error) {
       console.error('Error fetching announcements:', error);
@@ -88,6 +99,75 @@ const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  // Handle announcement submission
+  const handleAnnouncementSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      toast.error('Please fix the form errors');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('http://localhost:5000/api/announcements', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...announcement,
+          date: new Date(announcement.date).toISOString()
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Announcement created successfully!');
+        setAnnouncement({
+          title: '',
+          date: new Date().toISOString().split('T')[0],
+          type: '',
+          link: ''
+        });
+        fetchAnnouncements(); // Refresh the announcements list
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Failed to create announcement');
+      }
+    } catch (error) {
+      console.error('Error creating announcement:', error);
+      toast.error('Error creating announcement');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle announcement deletion
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this announcement?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/announcements/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        toast.success('Announcement deleted successfully');
+        fetchAnnouncements(); // Refresh the list
+      } else {
+        const errorData = await response.json();
+        toast.error(errorData.message || 'Failed to delete announcement');
+      }
+    } catch (error) {
+      console.error('Error deleting announcement:', error);
+      toast.error('Error deleting announcement');
+    }
+  };
+
+  // Fetch announcements on component mount
   useEffect(() => {
     fetchAnnouncements();
   }, []);
@@ -133,90 +213,14 @@ const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  const handleAnnouncementSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      toast.error('Please fix the form errors');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch('http://localhost:3000/api/announcements', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(announcement),
-      });
-
-      if (response.ok) {
-        toast.success('Announcement created successfully!');
-        setAnnouncement({
-          title: '',
-          date: new Date().toISOString().split('T')[0],
-          type: 'Announcement',
-          link: ''
-        });
-        setShowPreview(false);
-        fetchAnnouncements(); // Refresh the announcements list
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.message || 'Failed to create announcement');
-      }
-    } catch (error) {
-      console.error('Error creating announcement:', error);
-      toast.error('Error creating announcement');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteAnnouncement = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this announcement?')) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`http://localhost:3000/api/announcements/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        toast.success('Announcement deleted successfully');
-        fetchAnnouncements(); // Refresh the list
-      } else {
-        toast.error('Failed to delete announcement');
-      }
-    } catch (error) {
-      console.error('Error deleting announcement:', error);
-      toast.error('Error deleting announcement');
-    }
-  };
-
   const handleAddAnnouncementClick = () => {
     setActiveSection(activeSection === 'announcement' ? null : 'announcement');
     setAnnouncement({
       title: '',
       date: new Date().toISOString().split('T')[0],
-      type: 'Announcement',
+      type: '',
       link: ''
     });
-  };
-
-  const handleResultClick = () => {
-    setActiveSection(activeSection === 'result' ? null : 'result');
-    setExamResult({
-      semester: '',
-      examDate: new Date().toISOString().split('T')[0],
-      examType: 'Regular',
-      csvFile: null
-    });
-  };
-
-  const handleModifyDetailsClick = () => {
-    setActiveSection(activeSection === 'modifyDetails' ? null : 'modifyDetails');
   };
 
   const handleRevaluationClick = () => {
@@ -226,15 +230,6 @@ const AdminDashboardPage: React.FC = () => {
   const handleLogout = () => {
     logout(); // Clear authentication state
     navigate('/'); // Redirect to the homepage
-  };
-
-  const handleExamDetailsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setExamDetails((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Handle CSV file upload
   };
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -271,11 +266,6 @@ const AdminDashboardPage: React.FC = () => {
   const handleEvaluateClick = (student: any) => {
     setEvaluatingStudent(student);
     setShowRevaluationForm(false);
-    setShowEvaluationDetailsForm(true);
-  };
-
-  const handlePDFUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Handle PDF file upload
   };
 
   const handleMarksChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -286,7 +276,6 @@ const AdminDashboardPage: React.FC = () => {
   const handleSaveEvaluation = () => {
     // Save the evaluation details
     console.log("Saving evaluation for student:", evaluatingStudent);
-    setShowEvaluationDetailsForm(false);
     setEvaluatingStudent(null);
   };
 
@@ -347,6 +336,21 @@ const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const handleRevalFilterChange = (field: string, value: string) => {
+    setRevalFilter(prev => ({ ...prev, [field]: value }));
+    const filteredData = revaluationData.filter(request => {
+      if (field === 'usn') return request.usn.includes(value);
+      if (field === 'subject') return request.subName.includes(value);
+      if (field === 'status') return request.paymentStatus === value;
+      return true;
+    });
+    setFilteredRevalData(filteredData);
+  };
+
+  const handleRevalAction = (request: RevaluationRequest, action: string) => {
+    // Handle revaluation action
+  };
+
   return (
     <div className="container mx-auto p-4">
       {/* Welcome Header */}
@@ -384,7 +388,7 @@ const AdminDashboardPage: React.FC = () => {
           <h3 className="text-xl font-semibold mb-2">Upload Result</h3>
           <p className="text-gray-600 mb-4">Upload and manage exam results</p>
           <button
-            onClick={handleResultClick}
+            onClick={() => setActiveSection(activeSection === 'result' ? null : 'result')}
             className={`w-full py-2 px-4 rounded-lg transition duration-300 ${
               activeSection === 'result'
                 ? 'bg-green-800 text-white hover:bg-green-900'
@@ -399,7 +403,7 @@ const AdminDashboardPage: React.FC = () => {
           <h3 className="text-xl font-semibold mb-2">Modify Details</h3>
           <p className="text-gray-600 mb-4">Update student information</p>
           <button
-            onClick={handleModifyDetailsClick}
+            onClick={() => setActiveSection(activeSection === 'modifyDetails' ? null : 'modifyDetails')}
             className={`w-full py-2 px-4 rounded-lg transition duration-300 ${
               activeSection === 'modifyDetails'
                 ? 'bg-yellow-800 text-white hover:bg-yellow-900'
@@ -429,310 +433,484 @@ const AdminDashboardPage: React.FC = () => {
       {/* Content Sections */}
       <div className="mt-8">
         {activeSection === 'announcement' && (
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-2xl font-bold mb-4">Add Announcement</h2>
-              <form onSubmit={handleAnnouncementSubmit}>
+          <div className="bg-white p-8 rounded-2xl shadow-lg">
+            <div className="max-w-3xl mx-auto">
+              <div className="flex items-center justify-between mb-8">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Title</label>
-                  <input
-                    type="text"
-                    value={announcement.title}
-                    onChange={(e) => {
-                      setAnnouncement({ ...announcement, title: e.target.value });
-                      setFormErrors({ ...formErrors, title: undefined });
-                    }}
-                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                      formErrors.title ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  />
-                  {formErrors.title && <p className="text-red-500 text-sm mt-1">{formErrors.title}</p>}
+                  <h2 className="text-3xl font-bold text-gray-900">Add Announcement</h2>
+                  <p className="mt-2 text-gray-600">Create and manage important announcements</p>
+                </div>
+                <div className="h-16 w-16 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                  </svg>
+                </div>
+              </div>
+
+              <form onSubmit={handleAnnouncementSubmit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                    <input
+                      type="text"
+                      value={announcement.title}
+                      onChange={(e) => setAnnouncement({ ...announcement, title: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                    <input
+                      type="date"
+                      value={announcement.date}
+                      onChange={(e) => setAnnouncement({ ...announcement, date: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700">Date</label>
-                  <input
-                    type="date"
-                    value={announcement.date}
-                    onChange={(e) => {
-                      setAnnouncement({ ...announcement, date: e.target.value });
-                      setFormErrors({ ...formErrors, date: undefined });
-                    }}
-                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                      formErrors.date ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  />
-                  {formErrors.date && <p className="text-red-500 text-sm mt-1">{formErrors.date}</p>}
-                </div>
-
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700">Type</label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
                   <select
                     value={announcement.type}
-                    onChange={(e) => {
-                      setAnnouncement({ ...announcement, type: e.target.value as Announcement['type'] });
-                      setFormErrors({ ...formErrors, type: undefined });
-                    }}
-                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                      formErrors.type ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    onChange={(e) => setAnnouncement({ ...announcement, type: e.target.value as any })}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    required
                   >
+                    <option value="">Select type</option>
                     <option value="Announcement">Announcement</option>
                     <option value="Result">Result</option>
                     <option value="Revaluation">Revaluation</option>
                     <option value="Notice">Notice</option>
                   </select>
-                  {formErrors.type && <p className="text-red-500 text-sm mt-1">{formErrors.type}</p>}
                 </div>
 
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700">Link</label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Link</label>
                   <input
                     type="url"
                     value={announcement.link}
-                    onChange={(e) => {
-                      setAnnouncement({ ...announcement, link: e.target.value });
-                      setFormErrors({ ...formErrors, link: undefined });
-                    }}
-                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
-                      formErrors.link ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="https://example.com"
+                    onChange={(e) => setAnnouncement({ ...announcement, link: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                    placeholder="https://"
+                    required
                   />
-                  {formErrors.link && <p className="text-red-500 text-sm mt-1">{formErrors.link}</p>}
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="mt-6 w-full bg-blue-800 text-white py-2 px-4 rounded-md hover:bg-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                >
-                  {isSubmitting ? 'Creating...' : 'Create Announcement'}
-                </button>
+                <div className="flex justify-end space-x-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-6 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300"
+                  >
+                    {isSubmitting ? 'Submitting...' : 'Submit Announcement'}
+                  </button>
+                </div>
               </form>
-            </div>
 
-            {/* Recent Announcements Section */}
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-              <h2 className="text-2xl font-bold mb-4">Recent Announcements</h2>
-              <div className="space-y-4">
-                {recentAnnouncements.map((item) => (
-                  <div key={item._id} className="border p-4 rounded-lg hover:bg-gray-50">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold text-lg">{item.title}</h3>
-                        <p className="text-gray-600">Date: {new Date(item.date).toLocaleDateString()}</p>
-                        <p className="text-gray-600">Type: {item.type}</p>
-                        <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                          View Link
-                        </a>
+              {/* Recent Announcements Section */}
+              <div className="mt-12">
+                <h3 className="text-2xl font-bold text-gray-900 mb-6">Recent Announcements</h3>
+                <div className="space-y-4">
+                  {recentAnnouncements.map((item) => (
+                    <div key={item._id} className="bg-white p-6 rounded-xl border border-gray-200 hover:shadow-md transition-all duration-300">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-2">
+                          <h4 className="text-lg font-semibold text-gray-900">{item.title}</h4>
+                          <div className="flex items-center space-x-4 text-sm text-gray-600">
+                            <span>Date: {new Date(item.date).toLocaleDateString()}</span>
+                            <span>Type: {item.type}</span>
+                          </div>
+                          <a
+                            href={item.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center text-blue-600 hover:text-blue-700"
+                          >
+                            <span>View Link</span>
+                            <svg className="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                          </a>
+                        </div>
+                        <button
+                          onClick={() => item._id && handleDeleteAnnouncement(item._id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors duration-300"
+                        >
+                          <Trash className="h-5 w-5" />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => item._id && handleDeleteAnnouncement(item._id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash className="h-5 w-5" />
-                      </button>
+                    </div>
+                  ))}
+                  {recentAnnouncements.length === 0 && (
+                    <div className="text-center py-12 bg-gray-50 rounded-xl">
+                      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                      </svg>
+                      <p className="mt-4 text-gray-500">No announcements yet</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeSection === 'modifyDetails' && (
+          <div className="bg-white p-8 rounded-2xl shadow-lg">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-3xl font-bold text-gray-900">Modify Student Details</h2>
+                  <p className="mt-2 text-gray-600">Update and manage student information</p>
+                </div>
+                <div className="h-16 w-16 bg-yellow-100 rounded-xl flex items-center justify-center">
+                  <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Filter by USN</label>
+                <div className="max-w-md">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={filterUSN}
+                      onChange={handleFilterChange}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300"
+                      placeholder="Enter USN to filter"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
                     </div>
                   </div>
-                ))}
-                {recentAnnouncements.length === 0 && (
-                  <p className="text-gray-500 text-center py-4">No announcements yet</p>
-                )}
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exam Date</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredData.map((student, index) => (
+                      <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.usn}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.subjectCode}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.subjectName}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.marks}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                            student.status === 'Pass' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {student.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.examDate}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                          <button
+                            className={`inline-flex items-center text-blue-600 hover:text-blue-900 ${editStudent ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            onClick={() => handleEditClick(student)}
+                            disabled={!!editStudent}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            className="inline-flex items-center text-red-600 hover:text-red-900"
+                            onClick={() => handleDeleteClick(student)}
+                          >
+                            <Trash className="h-4 w-4 mr-1" />
+                            <span>Delete</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredData.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                          </svg>
+                          <p className="mt-4">No student records found</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeSection === 'revaluation' && (
+          <div className="bg-white p-8 rounded-2xl shadow-lg">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-3xl font-bold text-gray-900">Revaluation Requests</h2>
+                  <p className="mt-2 text-gray-600">Manage and process revaluation applications</p>
+                </div>
+                <div className="h-16 w-16 bg-purple-100 rounded-xl flex items-center justify-center">
+                  <svg className="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+              </div>
+
+              <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by USN</label>
+                  <input
+                    type="text"
+                    value={revalFilter.usn}
+                    onChange={(e) => handleRevalFilterChange('usn', e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
+                    placeholder="Enter USN"
+                  />
+                </div>
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Subject</label>
+                  <input
+                    type="text"
+                    value={revalFilter.subject}
+                    onChange={(e) => handleRevalFilterChange('subject', e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
+                    placeholder="Enter Subject"
+                  />
+                </div>
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Status</label>
+                  <select
+                    value={revalFilter.status}
+                    onChange={(e) => handleRevalFilterChange('status', e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
+                  >
+                    <option value="">All Status</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Marks</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Application Date</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredRevalData.map((request, index) => (
+                      <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{request.usn}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{request.subject}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{request.currentMarks}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{request.applicationDate}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                            request.status === 'Approved' ? 'bg-green-100 text-green-800' :
+                            request.status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {request.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                          <button
+                            className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors duration-200"
+                            onClick={() => handleRevalAction(request, 'approve')}
+                            disabled={request.status !== 'Pending'}
+                          >
+                            <Check className="h-4 w-4 mr-1" />
+                            <span>Approve</span>
+                          </button>
+                          <button
+                            className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors duration-200"
+                            onClick={() => handleRevalAction(request, 'reject')}
+                            disabled={request.status !== 'Pending'}
+                          >
+                            <X className="h-4 w-4 mr-1" />
+                            <span>Reject</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredRevalData.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                          </svg>
+                          <p className="mt-4">No revaluation requests found</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         )}
 
         {activeSection === 'result' && (
-          <div className="bg-white p-6 rounded-lg shadow-lg">
-            <h2 className="text-2xl font-bold mb-4">Upload Result</h2>
-            <form onSubmit={handleResultSubmit}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Semester</label>
-                <input
-                  type="text"
-                  value={examResult.semester}
-                  onChange={(e) => setExamResult(prev => ({ ...prev, semester: e.target.value }))}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  placeholder="e.g., Fall 2024"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Exam Type</label>
-                <select
-                  value={examResult.examType}
-                  onChange={(e) => setExamResult(prev => ({ ...prev, examType: e.target.value }))}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  required
-                >
-                  <option value="Regular">Regular</option>
-                  <option value="Supplementary">Supplementary</option>
-                  <option value="Revaluation">Revaluation</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Exam Date</label>
-                <input
-                  type="date"
-                  value={examResult.examDate}
-                  onChange={(e) => setExamResult(prev => ({ ...prev, examDate: e.target.value }))}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Results CSV File</label>
-                <div className="mt-1 flex items-center">
-                  <input
-                    id="csvFile"
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileChange}
-                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                    required
-                  />
+          <div className="bg-white p-8 rounded-2xl shadow-lg">
+            <div className="max-w-6xl mx-auto">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h2 className="text-3xl font-bold text-gray-900">Upload Results</h2>
+                  <p className="mt-2 text-gray-600">Upload and manage student examination results</p>
                 </div>
-                <p className="mt-2 text-sm text-gray-500">
-                  Upload a CSV file containing student marks. Format: studentName, subjectCode, marks
-                </p>
+                <div className="h-16 w-16 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={isUploadingResult}
-                className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
-                  isUploadingResult ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-              >
-                {isUploadingResult ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Uploading...
-                  </>
-                ) : (
-                  'Upload Results'
-                )}
-              </button>
-            </form>
-          </div>
-        )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Semester</label>
+                    <select
+                      value={examResult.semester}
+                      onChange={(e) => setExamResult({ ...examResult, semester: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      required
+                    >
+                      <option value="">Select semester</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                        <option key={sem} value={sem}>
+                          Semester {sem}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Exam Date</label>
+                    <input
+                      type="date"
+                      value={examResult.examDate}
+                      onChange={(e) => setExamResult({ ...examResult, examDate: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Exam Type</label>
+                    <select
+                      value={examResult.examType}
+                      onChange={(e) => setExamResult({ ...examResult, examType: e.target.value })}
+                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      required
+                    >
+                      <option value="Regular">Regular</option>
+                      <option value="Revaluation">Revaluation</option>
+                    </select>
+                  </div>
+                </div>
 
-        {activeSection === 'modifyDetails' && (
-          <div className="bg-white p-6 rounded-lg shadow-lg">
-            <h2 className="text-2xl font-bold mb-4">Modify Student Details</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Filter by USN</label>
-              <input
-                type="text"
-                value={filterUSN}
-                onChange={handleFilterChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="Enter USN to filter"
-              />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exam Date</th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredData.map((student, index) => (
-                    <tr key={index}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.usn}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.subjectCode}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.subjectName}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.marks}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.status}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.examDate}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex space-x-2">
-                        <button
-                          className={`text-blue-600 hover:text-blue-900 flex items-center ${editStudent ? 'blur-sm' : ''}`}
-                          onClick={() => handleEditClick(student)}
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Upload CSV File</label>
+                    <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-blue-500 transition-colors duration-300">
+                      <div className="space-y-1 text-center">
+                        <svg
+                          className="mx-auto h-12 w-12 text-gray-400"
+                          stroke="currentColor"
+                          fill="none"
+                          viewBox="0 0 48 48"
+                          aria-hidden="true"
                         >
-                          <Edit className="h-5 w-5 mr-1" />
-                          Edit
-                        </button>
-                        <button
-                          className="text-red-600 hover:text-red-900 flex items-center"
-                          onClick={() => handleDeleteClick(student)}
-                        >
-                          <Trash className="h-5 w-5 mr-1" />
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                          <path
+                            d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                            strokeWidth={2}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        <div className="flex text-sm text-gray-600">
+                          <label
+                            htmlFor="file-upload"
+                            className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"
+                          >
+                            <span>Upload a file</span>
+                            <input
+                              id="file-upload"
+                              name="file-upload"
+                              type="file"
+                              className="sr-only"
+                              accept=".csv"
+                              onChange={handleFileChange}
+                            />
+                          </label>
+                          <p className="pl-1">or drag and drop</p>
+                        </div>
+                        <p className="text-xs text-gray-500">CSV files only</p>
+                      </div>
+                    </div>
+                    {examResult.csvFile && (
+                      <p className="mt-2 text-sm text-gray-600">
+                        Selected file: {examResult.csvFile.name}
+                      </p>
+                    )}
+                  </div>
 
-        {activeSection === 'revaluation' && (
-          <div className="bg-white p-6 rounded-lg shadow-lg">
-            <h2 className="text-2xl font-bold mb-4">Revaluation Requests</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semester</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Credits</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fees</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {revaluationData.map((student, index) => (
-                    <tr key={index}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.subCode}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.subName}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.semester}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.marks}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.credits}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{student.fees}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          student.paymentStatus === 'Paid'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {student.paymentStatus}
+                  <div className="flex justify-end space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => setExamResult({
+                        semester: '',
+                        examDate: new Date().toISOString().split('T')[0],
+                        examType: 'Regular',
+                        csvFile: null
+                      })}
+                      className="px-6 py-3 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-all duration-300"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResultSubmit}
+                      disabled={isUploadingResult}
+                      className="px-6 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isUploadingResult ? (
+                        <span className="flex items-center">
+                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Uploading...
                         </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <button
-                          className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-300"
-                          onClick={() => handleEvaluateClick(student)}
-                        >
-                          Evaluate
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      ) : (
+                        'Upload Results'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -841,11 +1019,11 @@ const AdminDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {showEvaluationDetailsForm && (
+      {evaluatingStudent && (
         <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
           <button
             className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            onClick={() => setShowEvaluationDetailsForm(false)}
+            onClick={() => setEvaluatingStudent(null)}
           >
             <X className="h-6 w-6" />
           </button>
@@ -896,7 +1074,7 @@ const AdminDashboardPage: React.FC = () => {
               <input
                 type="file"
                 accept=".pdf"
-                onChange={handlePDFUpload}
+                onChange={() => {}}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
               />
             </div>
