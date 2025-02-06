@@ -88,42 +88,31 @@ const parseCSV = async (filePath) => {
 // Create new exam details with CSV upload
 exports.createExamDetails = async (req, res) => {
     try {
-        upload.single('csvFile')(req, res, async (err) => {
-            if (err) {
-                return res.status(400).json({ message: err.message });
-            }
+        // Create a new exam detail
+        const examDetail = new ExamDetails({
+            usn: req.body.usn,
+            semester: req.body.semester,
+            examDate: req.body.examDate,
+            examType: req.body.examType,
+            subjectCode: req.body.subjectCode,
+            subjectName: req.body.subjectName,
+            marks: req.body.marks,
+            status: req.body.status
+        });
 
-            if (!req.file) {
-                return res.status(400).json({ message: 'Please upload a CSV file' });
-            }
-
-            const { semester, examDate, examType } = req.body;
-            const csvFilePath = req.file.path;
-
-            try {
-                const studentResults = await parseCSV(csvFilePath);
-                
-                const examDetails = new ExamDetails({
-                    semester,
-                    examDate,
-                    examType,
-                    studentResults
-                });
-
-                const savedExamDetails = await examDetails.save();
-                
-                // Clean up uploaded file
-                fs.unlinkSync(csvFilePath);
-                
-                res.status(201).json(savedExamDetails);
-            } catch (error) {
-                // Clean up uploaded file if processing fails
-                fs.unlinkSync(csvFilePath);
-                res.status(400).json({ message: error.message });
-            }
+        // Save to database
+        const savedDetail = await examDetail.save();
+        
+        res.status(201).json({
+            message: 'Result uploaded successfully',
+            data: savedDetail
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Error in createExamDetails:', error);
+        res.status(400).json({
+            message: error.message,
+            details: error.errors || error
+        });
     }
 };
 
@@ -154,20 +143,11 @@ exports.getExamDetailsById = async (req, res) => {
 exports.getResultsByUSN = async (req, res) => {
     try {
         const { usn } = req.params;
-        const examDetails = await ExamDetails.find({
-            'studentResults.usn': usn
-        });
-
-        if (!examDetails || examDetails.length === 0) {
+        const results = await ExamDetails.find({ usn });
+        
+        if (!results || results.length === 0) {
             return res.status(404).json({ message: 'No results found for this USN' });
         }
-
-        const results = examDetails.map(exam => ({
-            semester: exam.semester,
-            examDate: exam.examDate,
-            examType: exam.examType,
-            result: exam.studentResults.find(student => student.usn === usn)
-        }));
 
         res.status(200).json(results);
     } catch (error) {
@@ -178,55 +158,126 @@ exports.getResultsByUSN = async (req, res) => {
 // Update exam details
 exports.updateExamDetails = async (req, res) => {
     try {
-        upload.single('csvFile')(req, res, async (err) => {
-            if (err) {
-                return res.status(400).json({ message: err.message });
-            }
+        const { id } = req.params;
+        const updates = req.body;
 
-            const updates = {
-                semester: req.body.semester,
-                examDate: req.body.examDate,
-                examType: req.body.examType
-            };
+        // Validate marks and update status if marks are changed
+        if (updates.marks !== undefined) {
+            updates.status = parseInt(updates.marks) >= 40 ? 'Pass' : 'Fail';
+        }
 
-            if (req.file) {
-                try {
-                    updates.studentResults = await parseCSV(req.file.path);
-                    fs.unlinkSync(req.file.path);
-                } catch (error) {
-                    if (req.file) fs.unlinkSync(req.file.path);
-                    return res.status(400).json({ message: error.message });
-                }
-            }
+        const updatedExam = await ExamDetails.findByIdAndUpdate(
+            id,
+            updates,
+            { new: true, runValidators: true }
+        );
 
-            const examDetails = await ExamDetails.findByIdAndUpdate(
-                req.params.id,
-                updates,
-                { new: true }
-            );
+        if (!updatedExam) {
+            return res.status(404).json({ message: 'Exam details not found' });
+        }
 
-            if (!examDetails) {
-                return res.status(404).json({ message: 'Exam details not found' });
-            }
-
-            res.status(200).json(examDetails);
-        });
+        res.status(200).json(updatedExam);
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        console.error('Error in updateExamDetails:', error);
+        res.status(400).json({
+            message: error.message,
+            details: error.errors || error
+        });
     }
 };
 
 // Delete exam details
 exports.deleteExamDetails = async (req, res) => {
     try {
-        const examDetails = await ExamDetails.findById(req.params.id);
-        if (!examDetails) {
+        const { id } = req.params;
+        const deletedDetails = await ExamDetails.findByIdAndDelete(id);
+        
+        if (!deletedDetails) {
             return res.status(404).json({ message: 'Exam details not found' });
         }
-
-        await examDetails.remove();
+        
         res.status(200).json({ message: 'Exam details deleted successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+};
+
+// Get exam details by semester
+exports.getExamDetailsBySemester = async (req, res) => {
+    try {
+        const { semester } = req.params;
+        const results = await ExamDetails.find({ semester });
+        
+        if (!results || results.length === 0) {
+            return res.status(404).json({ message: 'No results found for this semester' });
+        }
+        
+        res.status(200).json(results);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// Bulk upload exam details
+exports.bulkUploadExamDetails = async (req, res) => {
+    try {
+        const { examDetails } = req.body;
+        
+        console.log('Received examDetails:', examDetails); // Debug log
+        
+        if (!Array.isArray(examDetails)) {
+            return res.status(400).json({ message: 'examDetails must be an array' });
+        }
+
+        // Validate and transform each entry
+        const validatedEntries = examDetails.map((entry, index) => {
+            // Validate required fields
+            const requiredFields = ['usn', 'semester', 'examDate', 'examType', 'subjectCode', 'subjectName', 'marks'];
+            const missingFields = requiredFields.filter(field => !entry[field]);
+            
+            if (missingFields.length > 0) {
+                throw new Error(`Row ${index + 1}: Missing required fields: ${missingFields.join(', ')}`);
+            }
+
+            // Create validated entry
+            const validatedEntry = new ExamDetails({
+                usn: entry.usn.trim(),
+                semester: entry.semester.toString(),
+                examDate: new Date(entry.examDate),
+                examType: entry.examType,
+                subjectCode: entry.subjectCode.trim(),
+                subjectName: entry.subjectName.trim(),
+                marks: parseInt(entry.marks),
+                status: parseInt(entry.marks) >= 40 ? 'Pass' : 'Fail'
+            });
+
+            // Additional validation
+            if (isNaN(validatedEntry.marks) || validatedEntry.marks < 0 || validatedEntry.marks > 100) {
+                throw new Error(`Row ${index + 1}: Invalid marks value`);
+            }
+
+            if (!['Regular', 'Supplementary'].includes(validatedEntry.examType)) {
+                throw new Error(`Row ${index + 1}: Invalid exam type`);
+            }
+
+            return validatedEntry;
+        });
+
+        // Create all exam details using insertMany
+        const savedDetails = await ExamDetails.insertMany(validatedEntries, { validateBeforeSave: true });
+        
+        console.log('Saved details:', savedDetails); // Debug log
+        
+        res.status(201).json({
+            message: 'Results uploaded successfully',
+            count: savedDetails.length,
+            firstEntry: savedDetails[0] // Debug: show first saved entry
+        });
+    } catch (error) {
+        console.error('Error in bulkUploadExamDetails:', error);
+        res.status(400).json({ 
+            message: error.message || 'Failed to upload results',
+            details: error.errors || error
+        });
     }
 };

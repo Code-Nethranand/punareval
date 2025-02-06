@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'; // Import useNavigate from react
 import { useAuthStore } from '../store/useAuthStore'; // Import useAuthStore
 import { Edit, Trash, X, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Papa from 'papaparse';
 
 interface Announcement {
   _id?: string;
@@ -33,6 +34,25 @@ interface RevaluationRequest {
   subject: string;
   currentMarks: string;
   applicationDate: string;
+  status: string;
+}
+
+interface ResultFormData {
+  semester: number;
+  examDate: string;
+  examType: 'Regular' | 'Supplementary' | 'Revaluation';
+  resultFile: File | null;
+}
+
+interface ExamDetail {
+  _id: string;
+  usn: string;
+  semester: string;
+  examDate: string;
+  examType: string;
+  subjectCode: string;
+  subjectName: string;
+  marks: number;
   status: string;
 }
 
@@ -76,11 +96,26 @@ const AdminDashboardPage: React.FC = () => {
   ]);
   const [editStudent, setEditStudent] = useState<any>(null);
   const [deleteStudent, setDeleteStudent] = useState<any>(null);
+  const [resultFormData, setResultFormData] = useState<ResultFormData>({
+    semester: 1,
+    examDate: '',
+    examType: 'Regular',
+    resultFile: null
+  });
+  const [examDetails, setExamDetails] = useState<ExamDetail[]>([]);
+  const [editingExam, setEditingExam] = useState<ExamDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [originalExamDetails, setOriginalExamDetails] = useState<ExamDetail[]>([]);
+  const [filters, setFilters] = useState({
+    usn: '',
+    semester: 'all',
+    status: 'all'
+  });
 
   // Fetch recent announcements
   const fetchAnnouncements = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/announcements');
+      const response = await fetch('http://localhost:3000/api/announcements');
       if (response.ok) {
         const data = await response.json();
         // Convert date strings to proper format
@@ -110,7 +145,7 @@ const AdminDashboardPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/api/announcements', {
+      const response = await fetch('http://localhost:3000/api/announcements', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -150,7 +185,7 @@ const AdminDashboardPage: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:5000/api/announcements/${id}`, {
+      const response = await fetch(`http://localhost:3000/api/announcements/${id}`, {
         method: 'DELETE',
       });
 
@@ -283,52 +318,103 @@ const AdminDashboardPage: React.FC = () => {
 
   const handleResultSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!examResult.csvFile) {
-      toast.error('Please select a CSV file');
+    
+    if (!examResult.semester || !examResult.examDate || !examResult.examType || !examResult.csvFile) {
+      toast.error('Please fill in all required fields and select a CSV file');
       return;
     }
 
     setIsUploadingResult(true);
-    const formData = new FormData();
-    formData.append('semester', examResult.semester);
-    formData.append('examDate', examResult.examDate);
-    formData.append('examType', examResult.examType);
-    formData.append('csvFile', examResult.csvFile);
-
     try {
-      const response = await fetch('http://localhost:3000/api/exams', {
-        method: 'POST',
-        body: formData,
-      });
+      const text = await examResult.csvFile.text();
+      
+      Papa.parse(text, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async (results) => {
+          try {
+            console.log('Parsed CSV data:', results.data); // Debug log
 
-      if (response.ok) {
-        toast.success('Results uploaded successfully!');
-        setExamResult({
-          semester: '',
-          examDate: new Date().toISOString().split('T')[0],
-          examType: 'Regular',
-          csvFile: null
-        });
-        // Reset file input
-        const fileInput = document.getElementById('csvFile') as HTMLInputElement;
-        if (fileInput) fileInput.value = '';
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.message || 'Failed to upload results');
-      }
-    } catch (error) {
-      console.error('Error uploading results:', error);
-      toast.error('Error uploading results');
-    } finally {
+            const examEntries = results.data.map((row: any, index: number) => {
+              if (!row.USN || !row.SubjectCode || !row.SubjectName || !row.Marks) {
+                throw new Error(`Row ${index + 1}: Missing required fields`);
+              }
+
+              const marks = parseInt(row.Marks);
+              if (isNaN(marks) || marks < 0 || marks > 100) {
+                throw new Error(`Row ${index + 1}: Invalid marks value`);
+              }
+
+              return {
+                usn: row.USN.trim(),
+                semester: examResult.semester,
+                examDate: examResult.examDate,
+                examType: examResult.examType,
+                subjectCode: row.SubjectCode.trim(),
+                subjectName: row.SubjectName.trim(),
+                marks: marks,
+                status: marks >= 40 ? 'Pass' : 'Fail'
+              };
+            });
+
+            console.log('Sending data:', { examDetails: examEntries }); // Debug log
+
+            const response = await fetch('http://localhost:3000/api/exams/bulk', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ examDetails: examEntries })
+            });
+
+            const responseData = await response.json();
+            console.log('Server response:', responseData); // Debug log
+
+            if (!response.ok) {
+              throw new Error(responseData.message || 'Failed to upload results');
+            }
+
+            toast.success(`Successfully uploaded ${examEntries.length} results`);
+            
+            // Reset form
+            setExamResult({
+              semester: '',
+              examDate: new Date().toISOString().split('T')[0],
+              examType: 'Regular',
+              csvFile: null
+            });
+
+            // Reset file input
+            const fileInput = document.getElementById('result-file-upload') as HTMLInputElement;
+            if (fileInput) fileInput.value = '';
+
+          } catch (error: any) {
+            console.error('Error processing results:', error);
+            toast.error(error.message || 'Failed to process results');
+          } finally {
+            setIsUploadingResult(false);
+          }
+        },
+        error: (error) => {
+          console.error('Papa Parse Error:', error);
+          toast.error('Error parsing CSV file');
+          setIsUploadingResult(false);
+        }
+      });
+    } catch (error: any) {
+      console.error('Upload Error:', error);
+      toast.error(error.message || 'Error uploading results');
       setIsUploadingResult(false);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+    const file = e.target.files?.[0];
+    console.log('Selected file:', file);
+    
+    if (file) {
       if (file.type !== 'text/csv') {
-        toast.error('Please upload a CSV file');
+        toast.error('Please select a CSV file');
         e.target.value = '';
         return;
       }
@@ -350,6 +436,450 @@ const AdminDashboardPage: React.FC = () => {
   const handleRevalAction = (request: RevaluationRequest, action: string) => {
     // Handle revaluation action
   };
+
+  const handleResultFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!resultFormData.resultFile) {
+      alert('Please select a CSV file');
+      return;
+    }
+
+    try {
+      // Parse CSV file
+      const text = await resultFormData.resultFile.text();
+      Papa.parse(text, {
+        header: true,
+        complete: async (results) => {
+          // Transform CSV data to match our schema
+          const resultsData = results.data.map((row: any) => ({
+            usn: row.USN,
+            name: row.Name,
+            semester: resultFormData.semester,
+            examDate: new Date(resultFormData.examDate),
+            examType: resultFormData.examType,
+            results: [
+              {
+                subjectCode: row.SubjectCode,
+                subjectName: row.SubjectName,
+                internalMarks: parseInt(row.InternalMarks),
+                externalMarks: parseInt(row.ExternalMarks),
+                totalMarks: parseInt(row.TotalMarks),
+                result: parseInt(row.TotalMarks) >= 40 ? 'Pass' : 'Fail'
+              }
+            ],
+            totalGPA: parseFloat(row.GPA)
+          }));
+
+          // Send to backend
+          const response = await fetch('http://localhost:3000/api/results/upload', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              semester: resultFormData.semester,
+              examDate: resultFormData.examDate,
+              examType: resultFormData.examType,
+              results: resultsData
+            })
+          });
+
+          if (response.ok) {
+            alert('Results uploaded successfully!');
+            // Reset form
+            setResultFormData({
+              semester: 1,
+              examDate: '',
+              examType: 'Regular',
+              resultFile: null
+            });
+          } else {
+            throw new Error('Failed to upload results');
+          }
+        },
+        error: (error) => {
+          console.error('Error parsing CSV:', error);
+          alert('Error parsing CSV file');
+        }
+      });
+    } catch (error) {
+      console.error('Error uploading results:', error);
+      alert('Failed to upload results');
+    }
+  };
+
+  // Add this component for CSV instructions
+  const CSVInstructionsNote = () => (
+    <div className="mt-4 p-6 bg-blue-50 rounded-lg border border-blue-100">
+      <h3 className="text-lg font-semibold text-blue-900 mb-4">CSV File Upload Instructions</h3>
+      
+      <div className="space-y-4">
+        <div>
+          <h4 className="font-medium text-blue-800 mb-2">Required CSV Format:</h4>
+          <div className="bg-white p-3 rounded border border-blue-200 font-mono text-sm">
+            USN,SubjectCode,SubjectName,Marks<br/>
+            1RV21CS001,21CS42,Operating Systems,75<br/>
+            1RV21CS002,21CS42,Operating Systems,82<br/>
+            1RV21CS003,21CS42,Operating Systems,45
+          </div>
+        </div>
+
+        <div>
+          <h4 className="font-medium text-blue-800 mb-2">Important Notes:</h4>
+          <ul className="list-disc list-inside space-y-1.5 text-blue-900">
+            <li>Column headers must match exactly (case-sensitive)</li>
+            <li>All fields are required</li>
+            <li>Marks must be whole numbers between 0 and 100</li>
+            <li>No empty cells allowed</li>
+            <li>Semester, Exam Date, and Exam Type are taken from the form fields</li>
+            <li>Pass/Fail status is automatically determined (Pass ≥ 40)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+
+  const fetchExamDetails = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('http://localhost:3000/api/exams');
+      if (!response.ok) {
+        throw new Error('Failed to fetch exam details');
+      }
+      const data = await response.json();
+      setOriginalExamDetails(data); // Store original data
+      setExamDetails(data);
+    } catch (error) {
+      console.error('Error fetching exam details:', error);
+      toast.error('Failed to fetch exam details');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === 'modifyDetails') {
+      fetchExamDetails();
+    }
+  }, [activeSection]);
+
+  const handleExamUpdate = async (examId: string, updatedData: Partial<ExamDetail>) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/exams/${examId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update exam details');
+      }
+
+      toast.success('Exam details updated successfully');
+      setEditingExam(null);
+      fetchExamDetails(); // Refresh the data
+    } catch (error) {
+      console.error('Error updating exam details:', error);
+      toast.error('Failed to update exam details');
+    }
+  };
+
+  const handleExamDelete = async (examId: string) => {
+    if (!window.confirm('Are you sure you want to delete this exam detail?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/exams/${examId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete exam details');
+      }
+
+      toast.success('Exam details deleted successfully');
+      fetchExamDetails(); // Refresh the data
+    } catch (error) {
+      console.error('Error deleting exam details:', error);
+      toast.error('Failed to delete exam details');
+    }
+  };
+
+  const applyFilters = () => {
+    let filteredData = [...originalExamDetails];
+
+    // Apply USN filter
+    if (filters.usn) {
+      filteredData = filteredData.filter(exam => 
+        exam.usn.toLowerCase().includes(filters.usn.toLowerCase())
+      );
+    }
+
+    // Apply semester filter
+    if (filters.semester !== 'all') {
+      filteredData = filteredData.filter(exam => 
+        exam.semester === filters.semester
+      );
+    }
+
+    // Apply status filter
+    if (filters.status !== 'all') {
+      filteredData = filteredData.filter(exam => 
+        exam.status === filters.status
+      );
+    }
+
+    setExamDetails(filteredData);
+  };
+
+  useEffect(() => {
+    applyFilters();
+  }, [filters, originalExamDetails]);
+
+  const renderExamDetailsTable = () => (
+    <div className="bg-white p-6 rounded-lg shadow-lg">
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-gray-800">Modify Exam Details</h2>
+        <p className="text-gray-600 mt-1">View and modify student examination records</p>
+      </div>
+
+      {/* Search and Filter Section */}
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Search by USN</label>
+          <input
+            type="text"
+            placeholder="Enter USN..."
+            value={filters.usn}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            onChange={(e) => {
+              setFilters(prev => ({
+                ...prev,
+                usn: e.target.value
+              }));
+            }}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Semester</label>
+          <select
+            value={filters.semester}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            onChange={(e) => {
+              setFilters(prev => ({
+                ...prev,
+                semester: e.target.value
+              }));
+            }}
+          >
+            <option value="all">All Semesters</option>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+              <option key={sem} value={sem.toString()}>{`Semester ${sem}`}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Status</label>
+          <select
+            value={filters.status}
+            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            onChange={(e) => {
+              setFilters(prev => ({
+                ...prev,
+                status: e.target.value
+              }));
+            }}
+          >
+            <option value="all">All Status</option>
+            <option value="Pass">Pass</option>
+            <option value="Fail">Fail</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Add Reset Filters button */}
+      <div className="mb-4">
+        <button
+          onClick={() => {
+            setFilters({
+              usn: '',
+              semester: 'all',
+              status: 'all'
+            });
+          }}
+          className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+        >
+          Reset Filters
+        </button>
+      </div>
+
+      {/* Table Section */}
+      {isLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        </div>
+      ) : examDetails.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="text-gray-400 text-6xl mb-4">📚</div>
+          <h3 className="text-lg font-medium text-gray-900">No Records Found</h3>
+          <p className="text-gray-500 mt-2">Try adjusting your search or filter criteria</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semester</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Details</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exam Info</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {examDetails.map((exam) => (
+                <tr key={exam._id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="text-sm font-medium text-gray-900">{exam.usn}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900">{exam.semester}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900 font-medium">{exam.subjectCode}</div>
+                    <div className="text-sm text-gray-500">{exam.subjectName}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900">{exam.examType}</div>
+                    <div className="text-sm text-gray-500">
+                      {new Date(exam.examDate).toLocaleDateString()}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm font-medium text-gray-900">{exam.marks}/100</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                      ${exam.status === 'Pass' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'}`}>
+                      {exam.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => setEditingExam(exam)}
+                        className="text-indigo-600 hover:text-indigo-900 transition-colors"
+                        title="Edit"
+                      >
+                        <Edit className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleExamDelete(exam._id)}
+                        className="text-red-600 hover:text-red-900 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingExam && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-medium text-gray-900">Edit Exam Details</h3>
+                <button onClick={() => setEditingExam(null)} className="text-gray-400 hover:text-gray-500">
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+            </div>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              handleExamUpdate(editingExam._id, editingExam);
+            }} className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Student USN</label>
+                  <input
+                    type="text"
+                    value={editingExam.usn}
+                    disabled
+                    className="mt-1 block w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Marks</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={editingExam.marks}
+                    onChange={(e) => setEditingExam({
+                      ...editingExam,
+                      marks: parseInt(e.target.value),
+                      status: parseInt(e.target.value) >= 40 ? 'Pass' : 'Fail'
+                    })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Status</label>
+                  <select
+                    value={editingExam.status}
+                    onChange={(e) => setEditingExam({
+                      ...editingExam,
+                      status: e.target.value
+                    })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="Pass">Pass</option>
+                    <option value="Fail">Fail</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingExam(null)}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="container mx-auto p-4">
@@ -559,220 +1089,7 @@ const AdminDashboardPage: React.FC = () => {
           </div>
         )}
 
-        {activeSection === 'modifyDetails' && (
-          <div className="bg-white p-8 rounded-2xl shadow-lg">
-            <div className="max-w-6xl mx-auto">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-3xl font-bold text-gray-900">Modify Student Details</h2>
-                  <p className="mt-2 text-gray-600">Update and manage student information</p>
-                </div>
-                <div className="h-16 w-16 bg-yellow-100 rounded-xl flex items-center justify-center">
-                  <svg className="h-8 w-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Filter by USN</label>
-                <div className="max-w-md">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={filterUSN}
-                      onChange={handleFilterChange}
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-300"
-                      placeholder="Enter USN to filter"
-                    />
-                    <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Code</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject Name</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marks</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exam Date</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredData.map((student, index) => (
-                      <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.usn}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.subjectCode}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.subjectName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.marks}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                            student.status === 'Pass' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {student.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{student.examDate}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                          <button
-                            className={`inline-flex items-center text-blue-600 hover:text-blue-900 ${editStudent ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            onClick={() => handleEditClick(student)}
-                            disabled={!!editStudent}
-                          >
-                            <Edit className="h-4 w-4 mr-1" />
-                            <span>Edit</span>
-                          </button>
-                          <button
-                            className="inline-flex items-center text-red-600 hover:text-red-900"
-                            onClick={() => handleDeleteClick(student)}
-                          >
-                            <Trash className="h-4 w-4 mr-1" />
-                            <span>Delete</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredData.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                          </svg>
-                          <p className="mt-4">No student records found</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeSection === 'revaluation' && (
-          <div className="bg-white p-8 rounded-2xl shadow-lg">
-            <div className="max-w-6xl mx-auto">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-3xl font-bold text-gray-900">Revaluation Requests</h2>
-                  <p className="mt-2 text-gray-600">Manage and process revaluation applications</p>
-                </div>
-                <div className="h-16 w-16 bg-purple-100 rounded-xl flex items-center justify-center">
-                  <svg className="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-              </div>
-
-              <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by USN</label>
-                  <input
-                    type="text"
-                    value={revalFilter.usn}
-                    onChange={(e) => handleRevalFilterChange('usn', e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
-                    placeholder="Enter USN"
-                  />
-                </div>
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Subject</label>
-                  <input
-                    type="text"
-                    value={revalFilter.subject}
-                    onChange={(e) => handleRevalFilterChange('subject', e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
-                    placeholder="Enter Subject"
-                  />
-                </div>
-                <div className="relative">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Status</label>
-                  <select
-                    value={revalFilter.status}
-                    onChange={(e) => handleRevalFilterChange('status', e.target.value)}
-                    className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-300"
-                  >
-                    <option value="">All Status</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Rejected">Rejected</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Marks</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Application Date</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                      <th scope="col" className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredRevalData.map((request, index) => (
-                      <tr key={index} className="hover:bg-gray-50 transition-colors duration-200">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{request.usn}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{request.subject}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{request.currentMarks}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{request.applicationDate}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                            request.status === 'Approved' ? 'bg-green-100 text-green-800' :
-                            request.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {request.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
-                          <button
-                            className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors duration-200"
-                            onClick={() => handleRevalAction(request, 'approve')}
-                            disabled={request.status !== 'Pending'}
-                          >
-                            <Check className="h-4 w-4 mr-1" />
-                            <span>Approve</span>
-                          </button>
-                          <button
-                            className="inline-flex items-center px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors duration-200"
-                            onClick={() => handleRevalAction(request, 'reject')}
-                            disabled={request.status !== 'Pending'}
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            <span>Reject</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredRevalData.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                          <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                          </svg>
-                          <p className="mt-4">No revaluation requests found</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
+        {activeSection === 'modifyDetails' && renderExamDetailsTable()}
 
         {activeSection === 'result' && (
           <div className="bg-white p-8 rounded-2xl shadow-lg">
@@ -795,25 +1112,24 @@ const AdminDashboardPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">Semester</label>
                     <select
                       value={examResult.semester}
-                      onChange={(e) => setExamResult({ ...examResult, semester: e.target.value })}
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      onChange={(e) => setExamResult(prev => ({ ...prev, semester: e.target.value }))}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                       required
                     >
-                      <option value="">Select semester</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                        <option key={sem} value={sem}>
-                          Semester {sem}
-                        </option>
+                      <option value="">Select Semester</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                        <option key={sem} value={sem}>{sem}</option>
                       ))}
                     </select>
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Exam Date</label>
                     <input
                       type="date"
                       value={examResult.examDate}
-                      onChange={(e) => setExamResult({ ...examResult, examDate: e.target.value })}
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      onChange={(e) => setExamResult(prev => ({ ...prev, examDate: e.target.value }))}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                       required
                     />
                   </div>
@@ -821,12 +1137,12 @@ const AdminDashboardPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">Exam Type</label>
                     <select
                       value={examResult.examType}
-                      onChange={(e) => setExamResult({ ...examResult, examType: e.target.value })}
-                      className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
+                      onChange={(e) => setExamResult(prev => ({ ...prev, examType: e.target.value }))}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
                       required
                     >
                       <option value="Regular">Regular</option>
-                      <option value="Revaluation">Revaluation</option>
+                      <option value="Supplementary">Supplementary</option>
                     </select>
                   </div>
                 </div>
@@ -852,12 +1168,12 @@ const AdminDashboardPage: React.FC = () => {
                         </svg>
                         <div className="flex text-sm text-gray-600">
                           <label
-                            htmlFor="file-upload"
+                            htmlFor="result-file-upload"
                             className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"
                           >
                             <span>Upload a file</span>
                             <input
-                              id="file-upload"
+                              id="result-file-upload"
                               name="file-upload"
                               type="file"
                               className="sr-only"
@@ -898,7 +1214,7 @@ const AdminDashboardPage: React.FC = () => {
                     >
                       {isUploadingResult ? (
                         <span className="flex items-center">
-                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
@@ -911,183 +1227,155 @@ const AdminDashboardPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Add the instructions component */}
+              <CSVInstructionsNote />
             </div>
           </div>
         )}
-      </div>
+        {editStudent && (
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
+            <button
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              onClick={() => setEditStudent(null)}
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <h2 className="text-2xl font-semibold mb-4">Edit Student Details</h2>
+            <form onSubmit={handleResultSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Semester</label>
+                <select
+                  value={examResult.semester}
+                  onChange={(e) => setExamResult(prev => ({ ...prev, semester: e.target.value }))}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                >
+                  <option value="">Select Semester</option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                    <option key={sem} value={sem}>{sem}</option>
+                  ))}
+                </select>
+              </div>
 
-      {editStudent && (
-        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
-          <button
-            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            onClick={() => setEditStudent(null)}
-          >
-            <X className="h-6 w-6" />
-          </button>
-          <h2 className="text-2xl font-semibold mb-4">Edit Student Details</h2>
-          <form className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">USN</label>
-              <input
-                type="text"
-                name="usn"
-                value={editStudent.usn}
-                onChange={handleEditChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                disabled
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Subject Code</label>
-              <input
-                type="text"
-                name="subjectCode"
-                value={editStudent.subjectCode}
-                onChange={handleEditChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Subject Name</label>
-              <input
-                type="text"
-                name="subjectName"
-                value={editStudent.subjectName}
-                onChange={handleEditChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Marks</label>
-              <input
-                type="number"
-                name="marks"
-                value={editStudent.marks}
-                onChange={handleEditChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Status</label>
-              <input
-                type="text"
-                name="status"
-                value={editStudent.status}
-                onChange={handleEditChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Exam Date</label>
-              <input
-                type="date"
-                name="examDate"
-                value={editStudent.examDate}
-                onChange={handleEditChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </div>
-            <button
-              type="button"
-              className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
-              onClick={handleEditSave}
-            >
-              Save
-            </button>
-          </form>
-        </div>
-      )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Exam Date</label>
+                <input
+                  type="date"
+                  value={examResult.examDate}
+                  onChange={(e) => setExamResult(prev => ({ ...prev, examDate: e.target.value }))}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                />
+              </div>
 
-      {deleteStudent && (
-        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
-          <h2 className="text-2xl font-semibold mb-4">Confirm Deletion</h2>
-          <p>Are you sure you want to delete the student with USN {deleteStudent.usn}?</p>
-          <div className="mt-4 flex space-x-4">
-            <button
-              className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition duration-300"
-              onClick={confirmDelete}
-            >
-              Delete
-            </button>
-            <button
-              className="bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition duration-300"
-              onClick={() => setDeleteStudent(null)}
-            >
-              Cancel
-            </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Exam Type</label>
+                <select
+                  value={examResult.examType}
+                  onChange={(e) => setExamResult(prev => ({ ...prev, examType: e.target.value }))}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md"
+                  required
+                >
+                  <option value="Regular">Regular</option>
+                  <option value="Supplementary">Supplementary</option>
+                </select>
+              </div>
+            </form>
           </div>
-        </div>
-      )}
+        )}
 
-      {evaluatingStudent && (
-        <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
-          <button
-            className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            onClick={() => setEvaluatingStudent(null)}
-          >
-            <X className="h-6 w-6" />
-          </button>
-          <h2 className="text-2xl font-semibold mb-4">Evaluate Student</h2>
-          <form className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">USN</label>
-              <input
-                type="text"
-                name="usn"
-                value={evaluatingStudent.usn}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                disabled
-              />
+        {deleteStudent && (
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+            <h2 className="text-2xl font-semibold mb-4">Confirm Deletion</h2>
+            <p>Are you sure you want to delete the student with USN {deleteStudent.usn}?</p>
+            <div className="mt-4 flex space-x-4">
+              <button
+                className="bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition duration-300"
+                onClick={confirmDelete}
+              >
+                Delete
+              </button>
+              <button
+                className="bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition duration-300"
+                onClick={() => setDeleteStudent(null)}
+              >
+                Cancel
+              </button>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Subject Code</label>
-              <input
-                type="text"
-                name="subjectCode"
-                value={evaluatingStudent.subCode}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                disabled
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Subject Name</label>
-              <input
-                type="text"
-                name="subjectName"
-                value={evaluatingStudent.subName}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                disabled
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Marks</label>
-              <input
-                type="number"
-                name="marks"
-                value={evaluatingStudent.marks}
-                onChange={handleMarksChange}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Upload PDF</label>
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={() => {}}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              />
-            </div>
+          </div>
+        )}
+
+        {evaluatingStudent && (
+          <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
             <button
-              type="button"
-              className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
-              onClick={handleSaveEvaluation}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              onClick={() => setEvaluatingStudent(null)}
             >
-              Save
+              <X className="h-6 w-6" />
             </button>
-          </form>
-        </div>
-      )}
+            <h2 className="text-2xl font-semibold mb-4">Evaluate Student</h2>
+            <form className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">USN</label>
+                <input
+                  type="text"
+                  name="usn"
+                  value={evaluatingStudent.usn}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Subject Code</label>
+                <input
+                  type="text"
+                  name="subjectCode"
+                  value={evaluatingStudent.subCode}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Subject Name</label>
+                <input
+                  type="text"
+                  name="subjectName"
+                  value={evaluatingStudent.subName}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Marks</label>
+                <input
+                  type="number"
+                  name="marks"
+                  value={evaluatingStudent.marks}
+                  onChange={handleMarksChange}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Upload PDF</label>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={() => {}}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                />
+              </div>
+              <button
+                type="button"
+                className="mt-4 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition duration-300"
+                onClick={handleSaveEvaluation}
+              >
+                Save
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

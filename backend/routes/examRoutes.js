@@ -20,4 +20,10 @@ router.put('/:id', examController.updateExamDetails);
 // DELETE exam details
 router.delete('/:id', examController.deleteExamDetails);
 
+// Add the bulk upload route
+router.post('/bulk', examController.bulkUploadExamDetails);
+
+// GET exam details by semester
+router.get('/semester/:semester', examController.getExamDetailsBySemester);
+
 module.exports = router;

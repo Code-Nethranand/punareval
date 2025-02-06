@@ -95,7 +95,7 @@ export const PaymentSummary: React.FC = () => {
               paymentId: data.transaction_id 
             });
             toast.success('Payment successful!');
-            navigate(`/payment/status?order_id=${data.order_id}`);
+            navigate(`/payment/success`);
           } catch (error) {
             console.error("Payment verification error:", error);
             toast.error('Payment verification failed. Please contact support.');
