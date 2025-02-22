@@ -15,13 +15,8 @@ export const DashboardPage: React.FC = () => {
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-lg border bg-white p-6">
-          <h2 className="text-lg font-semibold">Pending Applications</h2>
-          <p className="mt-2 text-3xl font-bold text-blue-600">0</p>
-        </div>
-
-        <div className="rounded-lg border bg-white p-6">
           <h2 className="text-lg font-semibold">Processing</h2>
-          <p className="mt-2 text-3xl font-bold text-yellow-600">0</p>
+          <p className="mt-2 text-3xl font-bold text-yellow-600">3</p>
         </div>
 
         <div className="rounded-lg border bg-white p-6">

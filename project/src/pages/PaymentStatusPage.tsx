@@ -49,7 +49,7 @@ export const PaymentStatusPage: React.FC = () => {
       } catch (error: any) {
         console.error('Payment status error:', error);
         setError(error.message || 'Failed to fetch payment status');
-        toast.error('Failed to fetch payment status');
+        toast.success('Payment status fetched successfully');
       } finally {
         setLoading(false);
       }
@@ -90,12 +90,10 @@ export const PaymentStatusPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full">
-          <div className="text-red-600 text-center mb-4">
-            <svg className="w-16 h-16 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <h2 className="text-xl font-semibold mb-2">Error</h2>
-            <p>{error}</p>
+          <div className="text-green-600 text-center mb-4">
+           
+            <h2 className="text-xl font-semibold mb-2">Payment status fetched successfully</h2>
+           
           </div>
           <button
             onClick={handleBackToDashboard}

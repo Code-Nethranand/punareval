@@ -49,7 +49,38 @@ export const Result: React.FC = () => {
       semester: 5,
       examDate: "2024-01-19"
     },
+    {
+      id: "4",
+      subjectCode: "18CS54",
+      subjectName: "Operating Systems",
+      marks: 85,
+      maxMarks: 100,
+      status: "Pass",
+      semester: 5,
+      examDate: "2024-01-19"
+    },
+    {
+        id: "5",
+      subjectCode: "18CS55",
+      subjectName: "Computer Image Processing",
+      marks: 85,
+      maxMarks: 100,
+      status: "Pass",
+      semester: 5,
+      examDate: "2024-01-19"
+    },
+    {
+      id: "6",
+      subjectCode: "18CS56",
+      subjectName: "Data Structure",
+      marks: 85,
+      maxMarks: 100,
+      status: "Pass",
+      semester: 5,
+      examDate: "2024-01-19"
+    },
   ];
+
 
   const filteredResults = results.filter(result => {
     const matchesSearch = 

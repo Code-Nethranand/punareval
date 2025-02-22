@@ -2,23 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-@keyframes scroll {
+@keyframes news-scroll {
   0% {
     transform: translateX(0);
   }
   100% {
-    transform: translateX(calc(-380px * 4)); /* Width of card (320px) + gap (60px) * number of original items */
+    transform: translateX(-100%);
   }
 }
 
-.animate-scroll {
-  animation: scroll 30s linear infinite;
-  width: fit-content;
-  display: flex;
+.animate-news-scroll {
+  animation: news-scroll 200s linear infinite;
+  display: inline-flex;
+  white-space: nowrap;
+  padding-right: 100%;
 }
 
-.animate-scroll:hover {
+.animate-news-scroll:hover {
   animation-play-state: paused;
+}
+
+/* Container styles for the news scroll */
+.news-scroll-container {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.news-scroll-wrapper {
+  display: inline-flex;
+  white-space: nowrap;
+  will-change: transform;
 }
 
 .scrollbar-hide::-webkit-scrollbar {
@@ -28,4 +42,15 @@
 .scrollbar-hide {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
