@@ -71,6 +71,32 @@ const AdminDashboardPage: React.FC = () => {
     type: '',
     link: ''
   });
+  const [revaluationData1, setRevaluationData1] = useState([
+    {
+      usn: '1RV21CS001',
+      subject: 'Operating Systems',
+      currentMarks: 35,
+      applicationDate: '2023-04-01',
+      paymentStatus: 'Pending',
+      status: 'Pending',
+    },
+    {
+      usn: '1RV21CS002',
+      subject: 'Data Structures',
+      currentMarks: 40,
+      applicationDate: '2023-04-02',
+      paymentStatus: 'Paid',
+      status: 'Pending',
+    },
+    {
+      usn: '1RV21CS003',
+      subject: 'Computer Networks',
+      currentMarks: 28,
+      applicationDate: '2023-04-03',
+      paymentStatus: 'Paid',
+      status: 'Pending',
+    },
+  ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [recentAnnouncements, setRecentAnnouncements] = useState<Announcement[]>([]);
@@ -945,19 +971,20 @@ const AdminDashboardPage: React.FC = () => {
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow-lg">
-          <h3 className="text-xl font-semibold mb-2">Revaluation</h3>
-          <p className="text-gray-600 mb-4">Manage revaluation requests</p>
-          <button
-            onClick={handleRevaluationClick}
-            className={`w-full py-2 px-4 rounded-lg transition duration-300 ${
-              activeSection === 'revaluation'
-                ? 'bg-purple-800 text-white hover:bg-purple-900'
-                : 'bg-purple-600 text-white hover:bg-purple-700'
-            }`}
-          >
-            {activeSection === 'revaluation' ? 'Close Form' : 'View Requests'}
-          </button>
-        </div>
+        <h3 className="text-xl font-semibold mb-2">Revaluation</h3>
+        <p className="text-gray-600 mb-4">Manage revaluation requests</p>
+        <button
+          onClick={() => setActiveSection(activeSection === 'revaluation' ? null : 'revaluation')}
+          className={`w-full py-2 px-4 rounded-lg transition duration-300 ${
+            activeSection === 'revaluation'
+              ? 'bg-purple-800 text-white hover:bg-purple-900'
+              : 'bg-purple-600 text-white hover:bg-purple-700'
+          }`}
+        >
+          {activeSection === 'revaluation' ? 'Close Form' : 'View Requests'}
+        </button>
+      </div>
+
       </div>
 
       {/* Content Sections */}
@@ -1306,7 +1333,124 @@ const AdminDashboardPage: React.FC = () => {
           </div>
         )}
 
-        {evaluatingStudent && (
+            {activeSection === 'revaluation' && (
+        <div className="bg-white p-6 rounded-lg shadow-lg w-full">
+          <div className="mb-6">
+            <h2 className="text-2xl font-semibold text-gray-800">Revaluation Requests</h2>
+            <p className="text-gray-600 mt-1">Manage and process student revaluation requests</p>
+          </div>
+      
+          {/* Table Section */}
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">USN</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Marks</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Application Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                {revaluationData1.map((request, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">{request.usn}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{request.subject}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={request.currentMarks}
+                        onChange={(e) =>
+                          setRevaluationData1((prev) =>
+                            prev.map((item, i) =>
+                              i === index ? { ...item, currentMarks: e.target.value } : item
+                            )
+                          )
+                        }
+                        className="w-20 px-2 py-1 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{request.applicationDate}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <select
+                        value={request.status}
+                        onChange={(e) =>
+                          setRevaluationData1((prev) =>
+                            prev.map((item, i) =>
+                              i === index ? { ...item, status: e.target.value } : item
+                            )
+                          )
+                        }
+                        className="px-2 py-1 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          request.paymentStatus === 'Paid'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {request.paymentStatus}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={() => handleRevalAction(request, 'save')}
+                          className="text-blue-600 hover:text-blue-900 transition-colors"
+                          title="Save Changes"
+                        >
+                          <Check className="h-5 w-5" />
+                        </button>
+                        <label
+                          htmlFor={`upload-pdf-${index}`}
+                          className="text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+                          title="Upload PDF"
+                        >
+                          <input
+                            id={`upload-pdf-${index}`}
+                            type="file"
+                            accept=".pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                console.log(`Uploaded PDF for ${request.usn}:`, file.name);
+                              }
+                            }}
+                          />
+                          <span>📄</span>
+                        </label>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+      
+      
+
+      {evaluatingStudent && (
           <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg relative">
             <button
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
